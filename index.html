@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Territorios Congregación Puná 5256 - Coordinación de Predicación</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Leaflet CSS for GPS Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f4ff',
+                            100: '#e0e8ff',
+                            500: '#2563eb',
+                            600: '#1d4ed8',
+                            700: '#1e3a8a',
+                            800: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        .leaflet-container {
+            width: 100%;
+            height: 100%;
+            border-radius: 0.75rem;
+            z-index: 10;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Custom SVG map styling */
+        .svg-territory {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .svg-territory:hover {
+            filter: brightness(1.15) drop-shadow(0px 3px 6px rgba(0,0,0,0.3));
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 pb-20 md:pb-6 antialiased min-h-screen flex flex-col transition-colors duration-200">
+
+    <!-- Header Principal -->
+    <header class="bg-brand-700 dark:bg-slate-800 text-white shadow-md sticky top-0 z-40">
+        <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white/10 p-2 rounded-lg">
+                    <i class="fa-solid fa-map-location-dot text-xl text-blue-200"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-base md:text-lg leading-tight">Congregación Puná 5256</h1>
+                    <p class="text-xs text-blue-200">Puná Baja & Puná Alta — Predicación</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-2">
+                <!-- Toggle Dark Mode -->
+                <button onclick="toggleDarkMode()" class="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-blue-100 transition">
+                    <i id="themeIcon" class="fa-solid fa-moon"></i>
+                </button>
+                <!-- Botón Perfil de Usuario -->
+                <button id="userProfileBtn" onclick="toggleUserModal()" class="flex items-center space-x-2 bg-brand-600 hover:bg-brand-500 text-xs px-3 py-1.5 rounded-full border border-blue-400/30 transition">
+                    <i class="fa-solid fa-user-circle text-base text-blue-200"></i>
+                    <span id="currentUserNameDisplay" class="font-semibold">Cristian Palacios</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Notificación de Estado / Conexión Firebase -->
+    <div id="syncBadge" class="bg-blue-50 dark:bg-slate-800 border-b border-blue-100 dark:border-slate-700 text-brand-700 dark:text-blue-300 text-xs px-4 py-1.5 text-center flex items-center justify-center space-x-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span id="syncStatusText">Conectado y Sincronizado en tiempo real</span>
+    </div>
+
+    <!-- Contenido Principal (Pestañas) -->
+    <main class="max-w-5xl mx-auto px-4 py-4 flex-1 w-full">
+
+        <!-- PESTAÑA 1: PLANO OFICIAL & MAPA ESQUEMÁTICO -->
+        <section id="tab-schema" class="tab-content space-y-4">
+            
+            <!-- Controles Plano / Leyenda -->
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-3">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <div>
+                        <h2 class="font-bold text-slate-800 dark:text-slate-100 text-sm md:text-base flex items-center gap-2">
+                            <i class="fa-solid fa-map text-brand-600"></i> Plano Oficial Congregación Puná 5256
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Toca cualquier territorio del plano para ver su estado o registrar avance.</p>
+                    </div>
+                    <!-- Selector Grupo de Territorios (1-12 o 13-24) -->
+                    <div class="flex rounded-lg bg-slate-100 dark:bg-slate-700 p-1 w-full sm:w-auto">
+                        <button onclick="switchTerritoryGroup('1-12')" id="btnGroup1" class="flex-1 sm:flex-none text-xs font-semibold px-3 py-1.5 rounded-md bg-white dark:bg-slate-600 shadow text-brand-600 dark:text-white">
+                            Plano (Territorios 1 - 12)
+                        </button>
+                        <button onclick="switchTerritoryGroup('13-24')" id="btnGroup2" class="flex-1 sm:flex-none text-xs font-semibold px-3 py-1.5 rounded-md text-slate-500 dark:text-slate-300 hover:text-slate-700">
+                            Recintos (13 - 24)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ESQUEMA VECTORIAL INTERACTIVO BASADO EN LA FOTO DE PUNÁ 5256 -->
+                <div class="relative w-full bg-slate-900 rounded-xl overflow-hidden p-2 shadow-inner border border-slate-700">
+                    <div class="overflow-x-auto no-scrollbar">
+                        <div class="min-w-[700px] relative">
+                            <!-- SVG del plano oficial Puná Baja y Puná Alta -->
+                            <svg viewBox="0 0 1000 520" class="w-full h-auto select-none">
+                                <!-- Fondo Agua Canal de Jambelí / Brazo de Mar -->
+                                <rect width="1000" height="520" fill="#0f172a"/>
+                                <text x="500" y="30" fill="#94a3b8" font-size="14" font-weight="bold" text-anchor="middle" letter-spacing="2">CANAL DE JAMBELÍ</text>
+                                
+                                <!-- Muelle Puná -->
+                                <g transform="translate(220, 40)">
+                                    <rect x="0" y="0" width="120" height="40" fill="#cbd5e1" rx="3" stroke="#475569" stroke-width="2"/>
+                                    <text x="60" y="25" fill="#1e293b" font-size="12" font-weight="bold" text-anchor="middle">MUELLE PUNÁ</text>
+                                </g>
+
+                                <!-- Brazo de Mar / Canal Interno -->
+                                <path d="M 470,80 Q 480,250 490,510" stroke="#38bdf8" stroke-width="28" fill="none" opacity="0.8"/>
+                                <text x="460" y="160" fill="#e0f2fe" font-size="11" font-weight="bold" transform="rotate(-85 460 160)">Brazo de Mar</text>
+
+                                <!-- Glorietas (Puntos Rojos) -->
+                                <polygon points="465,110 475,100 485,110 480,125 470,125" fill="#dc2626" stroke="#ffffff" stroke-width="1.5"/>
+                                <text x="445" y="100" fill="#fca5a5" font-size="10" font-weight="bold">GLORIETA</text>
+                                <polygon points="525,120 535,110 545,120 540,135 530,135" fill="#dc2626" stroke="#ffffff" stroke-width="1.5"/>
+                                <text x="550" y="125" fill="#fca5a5" font-size="10" font-weight="bold">GLORIETA</text>
+
+                                <!-- Calles Principales -->
+                                <line x1="50" y1="130" x2="460" y2="130" stroke="#f1f5f9" stroke-width="6" stroke-dasharray="8,4"/>
+                                <text x="200" y="124" fill="#cbd5e1" font-size="10" font-weight="bold">MALECÓN / Av. Zapote</text>
+                                <line x1="530" y1="160" x2="900" y2="160" stroke="#f1f5f9" stroke-width="6"/>
+                                <text x="700" y="152" fill="#cbd5e1" font-size="10" font-weight="bold">CALLE PATRIA</text>
+                                <line x1="530" y1="220" x2="800" y2="220" stroke="#f1f5f9" stroke-width="5"/>
+                                <text x="650" y="214" fill="#94a3b8" font-size="9">Calle Independencia</text>
+                                <line x1="810" y1="160" x2="810" y2="480" stroke="#fbbf24" stroke-width="6"/>
+                                <text x="820" y="320" fill="#fef08a" font-size="10" font-weight="bold" transform="rotate(90 820 320)">AV. TARQUI</text>
+
+                                <!-- SECTOR PUNÁ BAJA (Izquierda - Territorios 7, 8, 9, 11, 12) -->
+                                <!-- Territorio 11 (Café Oscuro) -->
+                                <g class="svg-territory" onclick="openUpdateModal(11)">
+                                    <rect x="50" y="150" width="200" height="50" fill="#78350f" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <rect x="50" y="210" width="140" height="60" fill="#78350f" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <text x="130" y="180" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">T-11 (Bodegas)</text>
+                                </g>
+                                <!-- Territorio 12 (Morado Oscuro) -->
+                                <g class="svg-territory" onclick="openUpdateModal(12)">
+                                    <rect x="90" y="280" width="160" height="55" fill="#581c87" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <text x="170" y="312" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">T-12 (Malecón O.)</text>
+                                </g>
+                                <!-- Territorio 7 (Naranja Claro) -->
+                                <g class="svg-territory" onclick="openUpdateModal(7)">
+                                    <rect x="260" y="150" width="190" height="65" fill="#f97316" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <text x="355" y="187" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">T-7 (Glorieta / Malecón)</text>
+                                </g>
+                                <!-- Territorio 9 (Magenta / Rosado Vivo) -->
+                                <g class="svg-territory" onclick="openUpdateModal(9)">
+                                    <rect x="350" y="230" width="100" height="90" fill="#ec4899" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <rect x="220" y="340" width="230" height="45" fill="#ec4899" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <text x="330" y="367" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">T-9 (Puná Baja Centro)</text>
+                                </g>
+
+                                <!-- SECTOR PUNÁ ALTA & CENTRO (Derecha - Territorios 1, 2, 3, 4, 5, 6, 8, 10) -->
+                                <!-- Territorio 1 (Rosado Claro) -->
+                                <g class="svg-territory" onclick="openUpdateModal(1)">
+                                    <rect x="520" y="70" width="180" height="75" fill="#f472b6" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <text x="610" y="112" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">T-1 (Calle Palma / Rosa)</text>
+                                </g>
+                                <!-- Territorio 2 (Amarillo - CNT / Norte) -->
+                                <g class="svg-territory" onclick="openUpdateModal(2)">
+                                    <rect x="710" y="70" width="180" height="75" fill="#eab308" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <text x="800" y="112" fill="#1e293b" font-size="13" font-weight="bold" text-anchor="middle">T-2 (CNT / Puná Alta)</text>
+                                </g>
+                                <!-- Territorio 3 (Ocre / Café Claro) -->
+                                <g class="svg-territory" onclick="openUpdateModal(3)">
+                                    <rect x="520" y="170" width="180" height="45" fill="#d97706" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <text x="610" y="197" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">T-3 (Calle Independencia)</text>
+                                </g>
+                                <!-- Territorio 4 (Verde Oscuro - Bomberos) -->
+                                <g class="svg-territory" onclick="openUpdateModal(4)">
+                                    <rect x="520" y="230" width="150" height="80" fill="#15803d" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <text x="595" y="275" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">T-4 (Bomberos)</text>
+                                </g>
+                                <!-- Territorio 5 (Rojo - Estadio / Tarqui) -->
+                                <g class="svg-territory" onclick="openUpdateModal(5)">
+                                    <rect x="680" y="230" width="120" height="130" fill="#dc2626" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <text x="740" y="295" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">T-5 (Estadio)</text>
+                                </g>
+                                <!-- Territorio 6 (Verde Claro - Este / Av. Puná) -->
+                                <g class="svg-territory" onclick="openUpdateModal(6)">
+                                    <rect x="825" y="170" width="70" height="230" fill="#22c55e" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <text x="860" y="285" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle" transform="rotate(90 860 285)">T-6 (Puná Alta Este)</text>
+                                </g>
+                                <!-- Territorio 8 (Morado Claro - Sur Puná Baja) -->
+                                <g class="svg-territory" onclick="openUpdateModal(8)">
+                                    <rect x="520" y="320" width="140" height="110" fill="#a855f7" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <text x="590" y="375" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">T-8 (Cementerio / Sur)</text>
+                                </g>
+                                <!-- Territorio 10 (Salmón / Naranja Suave) -->
+                                <g class="svg-territory" onclick="openUpdateModal(10)">
+                                    <rect x="670" y="370" width="130" height="110" fill="#fb923c" rx="4" stroke="#ffffff" stroke-width="1"/>
+                                    <text x="735" y="425" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">T-10 (Sur Este)</text>
+                                </g>
+
+                                <!-- Puntos de Referencia / Textos de Ubicación -->
+                                <rect x="50" y="420" width="130" height="35" fill="#334155" rx="3"/>
+                                <text x="115" y="442" fill="#38bdf8" font-size="10" font-weight="bold" text-anchor="middle">BODEGAS BANANERAS</text>
+
+                                <rect x="830" y="420" width="120" height="35" fill="#334155" rx="3"/>
+                                <text x="890" y="442" fill="#fbbf24" font-size="11" font-weight="bold" text-anchor="middle">PUNÁ ALTA</text>
+
+                                <rect x="300" y="440" width="120" height="35" fill="#334155" rx="3"/>
+                                <text x="360" y="462" fill="#f472b6" font-size="11" font-weight="bold" text-anchor="middle">PUNÁ BAJA</text>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de Territorios con Tarjetas -->
+            <div class="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row gap-3 justify-between items-center">
+                <div class="relative w-full sm:w-auto flex-1">
+                    <i class="fa-solid fa-search absolute left-3 top-3 text-slate-400 text-sm"></i>
+                    <input type="text" id="searchInput" placeholder="Buscar por número, sector, calle o hermano..." 
+                           class="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-slate-800 dark:text-slate-100">
+                </div>
+                <div class="flex space-x-1 w-full sm:w-auto overflow-x-auto no-scrollbar pb-1 sm:pb-0">
+                    <button onclick="filterStatus('ALL')" class="filter-btn text-xs font-medium px-3 py-1.5 rounded-lg bg-brand-700 text-white shadow-sm whitespace-nowrap">Todos</button>
+                    <button onclick="filterStatus('EN_CURSO')" class="filter-btn text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 whitespace-nowrap">En curso</button>
+                    <button onclick="filterStatus('DISPONIBLE')" class="filter-btn text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 whitespace-nowrap">Disponibles</button>
+                    <button onclick="filterStatus('COMPLETADO')" class="filter-btn text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 whitespace-nowrap">Completados</button>
+                </div>
+            </div>
+
+            <!-- Grid de Tarjetas -->
+            <div id="territoriesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Se cargan dinámicamente con JS -->
+            </div>
+        </section>
+
+        <!-- PESTAÑA 2: MAPA GPS EN VIVO -->
+        <section id="tab-map" class="tab-content hidden space-y-4">
+            <div class="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="font-bold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-map-marked-alt text-brand-500"></i> Ubicación GPS en Vivo - Isla Puná
+                    </h2>
+                    <button onclick="locateUserGPS()" class="bg-brand-50 dark:bg-slate-700 hover:bg-brand-100 text-brand-600 dark:text-blue-300 text-xs px-3 py-1.5 rounded-lg font-medium border border-brand-200 dark:border-slate-600 flex items-center gap-1.5">
+                        <i class="fa-solid fa-crosshairs text-sm"></i> Mi Posición Actual
+                    </button>
+                </div>
+                <div class="h-[440px] w-full rounded-xl overflow-hidden shadow-inner relative border border-slate-200 dark:border-slate-700">
+                    <div id="map"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- PESTAÑA 3: INFORME MENSUAL AUTOMÁTICO -->
+        <section id="tab-reports" class="tab-content hidden space-y-4">
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+                <div class="flex items-center justify-between border-b dark:border-slate-700 pb-3">
+                    <div>
+                        <h2 class="font-bold text-slate-800 dark:text-slate-100 text-base">Informe Mensual Congregación Puná 5256</h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Generado automáticamente para el grupo</p>
+                    </div>
+                    <button onclick="copyMonthlyReport()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3.5 py-2 rounded-lg font-medium shadow flex items-center gap-1.5">
+                        <i class="fa-solid fa-copy"></i> Copiar para WhatsApp
+                    </button>
+                </div>
+
+                <!-- Métricas -->
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="bg-blue-50 dark:bg-slate-700/50 border border-blue-100 dark:border-slate-600 p-3 rounded-xl text-center">
+                        <span class="block text-2xl font-bold text-brand-600 dark:text-blue-400" id="statCompleted">0</span>
+                        <span class="text-[10px] sm:text-xs font-medium text-slate-600 dark:text-slate-300 uppercase">Completados</span>
+                    </div>
+                    <div class="bg-amber-50 dark:bg-slate-700/50 border border-amber-100 dark:border-slate-600 p-3 rounded-xl text-center">
+                        <span class="block text-2xl font-bold text-amber-600 dark:text-amber-400" id="statInProgress">0</span>
+                        <span class="text-[10px] sm:text-xs font-medium text-slate-600 dark:text-slate-300 uppercase">En Curso</span>
+                    </div>
+                    <div class="bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 p-3 rounded-xl text-center">
+                        <span class="block text-2xl font-bold text-slate-600 dark:text-slate-300" id="statAvailable">24</span>
+                        <span class="text-[10px] sm:text-xs font-medium text-slate-600 dark:text-slate-300 uppercase">Sin Iniciar</span>
+                    </div>
+                </div>
+
+                <!-- Barra de Progreso General -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-300">
+                        <span>Cobertura Total Cobertura Puná 5256</span>
+                        <span id="statPercentage">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                        <div id="statProgressBar" class="bg-brand-500 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Historial y Detalle -->
+                <div class="pt-2">
+                    <h3 class="font-semibold text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Detalle Completo por Territorio</h3>
+                    <div class="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                        <table class="w-full text-xs text-left">
+                            <thead class="bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-200 uppercase text-[10px] font-bold border-b dark:border-slate-600">
+                                <tr>
+                                    <th class="p-2.5">Territorio / Nombre</th>
+                                    <th class="p-2.5">Estado</th>
+                                    <th class="p-2.5">Conductor</th>
+                                    <th class="p-2.5">Última Parada / Cuadra</th>
+                                    <th class="p-2.5">Fecha</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportsTableBody" class="divide-y divide-slate-100 dark:divide-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                                <!-- Generado por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Navegación Inferior Móvil -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-30 shadow-lg">
+        <div class="max-w-5xl mx-auto flex justify-around">
+            <button onclick="switchTab('schema')" id="nav-schema" class="nav-btn flex-1 py-2.5 flex flex-col items-center justify-center text-brand-600 border-t-2 border-brand-600">
+                <i class="fa-solid fa-map-location-dot text-lg mb-0.5"></i>
+                <span class="text-[11px] font-medium">Plano / Lista</span>
+            </button>
+            <button onclick="switchTab('map')" id="nav-map" class="nav-btn flex-1 py-2.5 flex flex-col items-center justify-center text-slate-400 border-t-2 border-transparent hover:text-slate-600">
+                <i class="fa-solid fa-location-crosshairs text-lg mb-0.5"></i>
+                <span class="text-[11px] font-medium">Mapa GPS</span>
+            </button>
+            <button onclick="switchTab('reports')" id="nav-reports" class="nav-btn flex-1 py-2.5 flex flex-col items-center justify-center text-slate-400 border-t-2 border-transparent hover:text-slate-600">
+                <i class="fa-solid fa-file-lines text-lg mb-0.5"></i>
+                <span class="text-[11px] font-medium">Informe Mensual</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- MODAL 1: REGISTRAR AVANCE DE TERRITORIO -->
+    <div id="updateModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity">
+        <div class="bg-white dark:bg-slate-800 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b dark:border-slate-700 pb-3">
+                <div class="flex items-center space-x-2">
+                    <div id="modalColorBadge" class="w-4 h-4 rounded-full bg-brand-500 border"></div>
+                    <div>
+                        <h3 class="font-bold text-slate-800 dark:text-slate-100 text-lg" id="modalTerritoryTitle">Territorio N°</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400" id="modalTerritorySector">Sector Parroquia Puná</p>
+                    </div>
+                </div>
+                <button onclick="closeUpdateModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <form id="updateTerritoryForm" onsubmit="saveTerritoryProgress(event)" class="space-y-4">
+                <input type="hidden" id="modalTerritoryId">
+
+                <!-- Estado del Territorio -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Estado del Territorio</label>
+                    <select id="modalStatus" class="w-full p-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-semibold text-slate-800 dark:text-slate-100">
+                        <option value="DISPONIBLE">🟢 Disponible (Listo para salir)</option>
+                        <option value="EN_CURSO">🟡 En Curso (Predicando actualmente)</option>
+                        <option value="COMPLETADO">🔵 Completado (Totalmente abarcado)</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- Conductor de Grupo (Lista de Hermanos Actualizada) -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Hermano Conductor</label>
+                        <select id="modalConductorSelect" onchange="handleConductorSelect(this)" class="w-full p-2 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-100">
+                            <option value="Cristian Palacios">Cristian Palacios</option>
+                            <option value="Fabricio Chiquito">Fabricio Chiquito</option>
+                            <option value="Gabriel Saavedra">Gabriel Saavedra</option>
+                            <option value="Arturo Pérez">Arturo Pérez</option>
+                            <option value="Jhon Cruz">Jhon Cruz</option>
+                            <option value="OTRO">+ Otro hermano...</option>
+                        </select>
+                        <input type="text" id="modalConductorCustom" placeholder="Nombre del hermano" class="w-full p-2 mt-1 text-sm bg-slate-50 dark:bg-slate-700 border rounded-lg hidden">
+                    </div>
+
+                    <!-- Día de la semana -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Día de Salida</label>
+                        <select id="modalDay" class="w-full p-2 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-100">
+                            <option value="Martes">Martes</option>
+                            <option value="Miércoles">Miércoles</option>
+                            <option value="Jueves">Jueves</option>
+                            <option value="Viernes">Viernes</option>
+                            <option value="Sábado">Sábado</option>
+                            <option value="Domingo">Domingo</option>
+                            <option value="Lunes">Lunes</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Punto o Cuadra donde se quedó -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Última Cuadra o Punto de Parada</label>
+                    <input type="text" id="modalLastBlock" required placeholder="Ej. Cuadra 3 / Frente a CNT / Esquina Glorieta" 
+                           class="w-full p-2 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-100">
+                </div>
+
+                <!-- Notas Adicionales -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Notas / Casas no encontradas / Revisitas</label>
+                    <textarea id="modalNotes" rows="2" placeholder="Ej. Volver a casa de la esquina verde por la tarde..." 
+                              class="w-full p-2 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-100"></textarea>
+                </div>
+
+                <!-- Captura de Coordenadas GPS -->
+                <div class="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg border border-slate-200 dark:border-slate-600 flex items-center justify-between">
+                    <div class="text-xs text-slate-600 dark:text-slate-300">
+                        <span class="font-semibold block">Posición GPS de Parada</span>
+                        <span id="modalGpsDisplay" class="text-slate-400 font-mono text-[11px]">No capturada</span>
+                    </div>
+                    <button type="button" onclick="captureGPSForTerritory()" class="text-xs bg-slate-200 dark:bg-slate-600 hover:bg-slate-300 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded font-medium flex items-center gap-1">
+                        <i class="fa-solid fa-location-crosshairs text-brand-600 dark:text-blue-400"></i> Fijar GPS
+                    </button>
+                </div>
+
+                <!-- Botones de Acción -->
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="closeUpdateModal()" class="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-sm font-semibold rounded-lg">Cancelar</button>
+                    <button type="submit" class="flex-1 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg shadow">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: CONFIGURACIÓN DE NOMBRE -->
+    <div id="userModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-5 shadow-xl space-y-4">
+            <h3 class="font-bold text-slate-800 dark:text-slate-100 text-base flex items-center gap-2">
+                <i class="fa-solid fa-user-gear text-brand-600"></i> Tu Nombre de Hermano
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Selecciona tu nombre para registrar avances rápidamente en la app.</p>
+            <select id="userNameSelect" class="w-full p-2.5 border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg text-sm font-semibold">
+                <option value="Cristian Palacios">Cristian Palacios</option>
+                <option value="Fabricio Chiquito">Fabricio Chiquito</option>
+                <option value="Gabriel Saavedra">Gabriel Saavedra</option>
+                <option value="Arturo Pérez">Arturo Pérez</option>
+                <option value="Jhon Cruz">Jhon Cruz</option>
+            </select>
+            <div class="flex gap-2">
+                <button onclick="saveUserProfile()" class="w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-lg shadow">Guardar Mi Nombre</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed top-4 right-4 bg-slate-800 text-white text-xs px-4 py-3 rounded-xl shadow-xl z-50 transform transition-all duration-300 opacity-0 translate-y-[-10px] pointer-events-none flex items-center gap-2">
+        <i class="fa-solid fa-circle-check text-emerald-400 text-base" id="toastIcon"></i>
+        <span id="toastMessage">Sincronizado</span>
+    </div>
+
+    <!-- Firebase SDK Modules -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'puna-5256-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "demo-key",
+            authDomain: "demo-app.firebaseapp.com",
+            projectId: "demo-app",
+            storageBucket: "demo-app.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:demo"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUser = null;
+        let territoriesData = [];
+        let mapInstance = null;
+        let mapMarkers = {};
+        let currentFilter = 'ALL';
+        let capturedTempGPS = null;
+
+        // Leyenda Oficial de Colores basada en el Plano de la Congregación Puná 5256
+        const PUNA_MAP_DEFAULTS = [
+            { id: 1, name: "Territorio 1", sector: "Calle Palma / Zona Rosa", color: "#f472b6", lat: -2.7482, lng: -79.9045 },
+            { id: 2, name: "Territorio 2", sector: "CNT / Puná Alta Norte", color: "#eab308", lat: -2.7475, lng: -79.9020 },
+            { id: 3, name: "Territorio 3", sector: "Calle Independencia Norte", color: "#d97706", lat: -2.7490, lng: -79.9040 },
+            { id: 4, name: "Territorio 4", sector: "Cuerpo de Bomberos / Centro", color: "#15803d", lat: -2.7505, lng: -79.9050 },
+            { id: 5, name: "Territorio 5", sector: "Estadio / Av. Tarqui / Colegio", color: "#dc2626", lat: -2.7510, lng: -79.9030 },
+            { id: 6, name: "Territorio 6", sector: "Zona Este / Av. Puná Alta", color: "#22c55e", lat: -2.7500, lng: -79.9010 },
+            { id: 7, name: "Territorio 7", sector: "Glorieta / Malecón Centro", color: "#f97316", lat: -2.7480, lng: -79.9070 },
+            { id: 8, name: "Territorio 8", sector: "Puná Baja Sur / Cementerio", color: "#a855f7", lat: -2.7525, lng: -79.9065 },
+            { id: 9, name: "Territorio 9", sector: "Puná Baja Centro-Sur", color: "#ec4899", lat: -2.7515, lng: -79.9080 },
+            { id: 10, name: "Territorio 10", sector: "Puná Baja Este-Sur", color: "#fb923c", lat: -2.7535, lng: -79.9045 },
+            { id: 11, name: "Territorio 11", sector: "Malecón Oeste / Bodegas Bananeras", color: "#78350f", lat: -2.7470, lng: -79.9110 },
+            { id: 12, name: "Territorio 12", sector: "Malecón Oeste Alta / Interagua", color: "#581c87", lat: -2.7485, lng: -79.9125 }
+        ];
+
+        // Territorios 13 al 24 (Soporte para Recintos de la Isla)
+        const RECENTOS_DEFAULTS = Array.from({ length: 12 }, (_, i) => {
+            const id = i + 13;
+            return {
+                id: id,
+                name: `Territorio ${id}`,
+                sector: `Recinto Rural / Isla Puná ${id}`,
+                color: '#64748b',
+                lat: -2.7600 - (i * 0.005),
+                lng: -79.9100 - (i * 0.003)
+            };
+        });
+
+        const ALL_DEFAULT_TERRITORIES = [...PUNA_MAP_DEFAULTS, ...RECENTOS_DEFAULTS].map(t => ({
+            ...t,
+            status: "DISPONIBLE",
+            lastConductor: "Ninguno",
+            lastDay: "-",
+            lastBlock: "Sin iniciar",
+            lastDate: "-",
+            notes: ""
+        }));
+
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth Exception:", err);
+                await signInAnonymously(auth);
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('syncStatusText').textContent = "Sincronizado en tiempo real (ID: " + user.uid.substring(0,5) + ")";
+                listenToTerritories();
+            }
+        });
+
+        function listenToTerritories() {
+            if (!currentUser) return;
+            const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'territories');
+
+            onSnapshot(colRef, (snapshot) => {
+                if (snapshot.empty) {
+                    ALL_DEFAULT_TERRITORIES.forEach(t => {
+                        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'territories', `t_${t.id}`);
+                        setDoc(docRef, t);
+                    });
+                } else {
+                    territoriesData = [];
+                    snapshot.forEach(docSnap => territoriesData.push(docSnap.data()));
+                    territoriesData.sort((a, b) => a.id - b.id);
+                    renderTerritories();
+                    renderReports();
+                    updateMapMarkers();
+                }
+            }, (error) => {
+                console.error("Error Snapshot:", error);
+            });
+        }
+
+        window.switchTab = function(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('text-brand-600', 'border-brand-600');
+                btn.classList.add('text-slate-400', 'border-transparent');
+            });
+
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            const activeNav = document.getElementById(`nav-${tabName}`);
+            activeNav.classList.remove('text-slate-400', 'border-transparent');
+            activeNav.classList.add('text-brand-600', 'border-brand-600');
+
+            if (tabName === 'map') {
+                setTimeout(() => initMapIfNeeded(), 200);
+            }
+        };
+
+        window.filterStatus = function(status) {
+            currentFilter = status;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('bg-brand-700', 'text-white');
+                btn.classList.add('bg-slate-100', 'dark:bg-slate-700', 'text-slate-600', 'dark:text-slate-300');
+            });
+            event.target.classList.remove('bg-slate-100', 'dark:bg-slate-700', 'text-slate-600', 'dark:text-slate-300');
+            event.target.classList.add('bg-brand-700', 'text-white');
+            renderTerritories();
+        };
+
+        window.switchTerritoryGroup = function(group) {
+            const btn1 = document.getElementById('btnGroup1');
+            const btn2 = document.getElementById('btnGroup2');
+
+            if (group === '1-12') {
+                btn1.className = "flex-1 sm:flex-none text-xs font-semibold px-3 py-1.5 rounded-md bg-white dark:bg-slate-600 shadow text-brand-600 dark:text-white";
+                btn2.className = "flex-1 sm:flex-none text-xs font-semibold px-3 py-1.5 rounded-md text-slate-500 dark:text-slate-300 hover:text-slate-700";
+            } else {
+                btn2.className = "flex-1 sm:flex-none text-xs font-semibold px-3 py-1.5 rounded-md bg-white dark:bg-slate-600 shadow text-brand-600 dark:text-white";
+                btn1.className = "flex-1 sm:flex-none text-xs font-semibold px-3 py-1.5 rounded-md text-slate-500 dark:text-slate-300 hover:text-slate-700";
+            }
+            renderTerritories(group);
+        };
+
+        function renderTerritories(selectedGroup = '1-12') {
+            const container = document.getElementById('territoriesGrid');
+            const searchVal = document.getElementById('searchInput').value.toLowerCase();
+
+            const filtered = territoriesData.filter(t => {
+                const inGroup = selectedGroup === '1-12' ? (t.id <= 12) : (t.id > 12);
+                const matchesStatus = currentFilter === 'ALL' || t.status === currentFilter;
+                const matchesSearch = t.name.toLowerCase().includes(searchVal) || 
+                                      t.sector.toLowerCase().includes(searchVal) || 
+                                      t.lastConductor.toLowerCase().includes(searchVal);
+                return inGroup && matchesStatus && matchesSearch;
+            });
+
+            container.innerHTML = filtered.map(t => {
+                let badgeClass = "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300";
+                let statusLabel = "Disponible";
+                if (t.status === 'EN_CURSO') {
+                    badgeClass = "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
+                    statusLabel = "En curso";
+                } else if (t.status === 'COMPLETADO') {
+                    badgeClass = "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300";
+                    statusLabel = "Completado";
+                }
+
+                return `
+                    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col justify-between">
+                        <div class="p-4 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-3.5 h-3.5 rounded-full" style="background-color: ${t.color}"></span>
+                                    <h3 class="font-bold text-slate-800 dark:text-slate-100 text-base">${t.name}</h3>
+                                </div>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeClass}">
+                                    ${statusLabel}
+                                </span>
+                            </div>
+
+                            <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">${t.sector}</p>
+
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2.5 text-xs space-y-1.5 border border-slate-100 dark:border-slate-600">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500 dark:text-slate-400">Conductor:</span>
+                                    <span class="font-bold text-slate-700 dark:text-slate-200">${t.lastConductor}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500 dark:text-slate-400">Día / Fecha:</span>
+                                    <span class="text-slate-700 dark:text-slate-200">${t.lastDay} (${t.lastDate})</span>
+                                </div>
+                                <div class="flex justify-between border-t border-slate-200 dark:border-slate-600 pt-1">
+                                    <span class="font-medium text-brand-600 dark:text-blue-300">Última Parada:</span>
+                                    <span class="font-bold text-brand-700 dark:text-blue-200">${t.lastBlock}</span>
+                                </div>
+                                ${t.notes ? `<div class="text-[11px] text-slate-500 dark:text-slate-300 italic pt-1">"${t.notes}"</div>` : ''}
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-50 dark:bg-slate-700/30 border-t border-slate-100 dark:border-slate-700 p-2.5 flex gap-2">
+                            <button onclick="openUpdateModal(${t.id})" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5">
+                                <i class="fa-solid fa-pen-to-square"></i> Registrar Avance
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        document.getElementById('searchInput').addEventListener('input', () => renderTerritories());
+
+        window.handleConductorSelect = function(elem) {
+            const customInput = document.getElementById('modalConductorCustom');
+            if (elem.value === 'OTRO') {
+                customInput.classList.remove('hidden');
+                customInput.required = true;
+            } else {
+                customInput.classList.add('hidden');
+                customInput.required = false;
+            }
+        };
+
+        window.openUpdateModal = function(id) {
+            const t = territoriesData.find(item => item.id === id);
+            if (!t) return;
+
+            document.getElementById('modalTerritoryId').value = t.id;
+            document.getElementById('modalTerritoryTitle').textContent = `Territorio N° ${t.id}`;
+            document.getElementById('modalTerritorySector').textContent = t.sector;
+            document.getElementById('modalColorBadge').style.backgroundColor = t.color || '#2563eb';
+            document.getElementById('modalStatus').value = t.status;
+            
+            const conductorSelect = document.getElementById('modalConductorSelect');
+            const savedName = localStorage.getItem('puna_user_name') || 'Cristian Palacios';
+            const officialBrothers = ['Cristian Palacios', 'Fabricio Chiquito', 'Gabriel Saavedra', 'Arturo Pérez', 'Jhon Cruz'];
+
+            let cleanConductorName = t.lastConductor.replace(/^Hermano\s+/, '');
+            
+            if (officialBrothers.includes(cleanConductorName)) {
+                conductorSelect.value = cleanConductorName;
+                document.getElementById('modalConductorCustom').classList.add('hidden');
+            } else if (t.lastConductor !== 'Ninguno') {
+                conductorSelect.value = 'OTRO';
+                document.getElementById('modalConductorCustom').classList.remove('hidden');
+                document.getElementById('modalConductorCustom').value = cleanConductorName;
+            } else {
+                conductorSelect.value = savedName;
+            }
+
+            document.getElementById('modalDay').value = t.lastDay !== '-' ? t.lastDay : 'Martes';
+            document.getElementById('modalLastBlock').value = t.lastBlock !== 'Sin iniciar' ? t.lastBlock : '';
+            document.getElementById('modalNotes').value = t.notes || '';
+            
+            capturedTempGPS = (t.lat && t.lng) ? { lat: t.lat, lng: t.lng } : null;
+            document.getElementById('modalGpsDisplay').textContent = capturedTempGPS ? 
+                `${capturedTempGPS.lat.toFixed(4)}, ${capturedTempGPS.lng.toFixed(4)}` : "No capturada";
+
+            document.getElementById('updateModal').classList.remove('hidden');
+        };
+
+        window.closeUpdateModal = function() {
+            document.getElementById('updateModal').classList.add('hidden');
+        };
+
+        window.captureGPSForTerritory = function() {
+            if ("geolocation" in navigator) {
+                document.getElementById('modalGpsDisplay').textContent = "Obteniendo posición GPS...";
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        capturedTempGPS = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        document.getElementById('modalGpsDisplay').textContent = `${capturedTempGPS.lat.toFixed(5)}, ${capturedTempGPS.lng.toFixed(5)}`;
+                        showToast("Posición GPS fijada");
+                    },
+                    () => {
+                        showToast("No se pudo obtener la posición GPS", true);
+                    },
+                    { enableHighAccuracy: true }
+                );
+            }
+        };
+
+        window.saveTerritoryProgress = async function(event) {
+            event.preventDefault();
+            if (!currentUser) return;
+
+            const id = parseInt(document.getElementById('modalTerritoryId').value);
+            const status = document.getElementById('modalStatus').value;
+            
+            const condSelect = document.getElementById('modalConductorSelect').value;
+            const conductor = condSelect === 'OTRO' ? 
+                document.getElementById('modalConductorCustom').value.trim() : condSelect;
+
+            const day = document.getElementById('modalDay').value;
+            const block = document.getElementById('modalLastBlock').value.trim();
+            const notes = document.getElementById('modalNotes').value.trim();
+            const dateStr = new Date().toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit' });
+
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'territories', `t_${id}`);
+            const updatePayload = {
+                status: status,
+                lastConductor: `Hermano ${conductor}`,
+                lastDay: day,
+                lastBlock: block,
+                lastDate: dateStr,
+                notes: notes
+            };
+
+            if (capturedTempGPS) {
+                updatePayload.lat = capturedTempGPS.lat;
+                updatePayload.lng = capturedTempGPS.lng;
+            }
+
+            try {
+                await updateDoc(docRef, updatePayload);
+                showToast(`Territorio ${id} actualizado en vivo para el grupo.`);
+                closeUpdateModal();
+            } catch (err) {
+                console.error(err);
+                showToast("Error al guardar datos", true);
+            }
+        };
+
+        function initMapIfNeeded() {
+            if (mapInstance) return;
+            mapInstance = L.map('map').setView([-2.7495, -79.9055], 14);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 18,
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(mapInstance);
+
+            updateMapMarkers();
+        }
+
+        function updateMapMarkers() {
+            if (!mapInstance) return;
+            Object.values(mapMarkers).forEach(m => mapInstance.removeLayer(m));
+            mapMarkers = {};
+
+            territoriesData.forEach(t => {
+                if (t.lat && t.lng) {
+                    const markerIcon = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div style="background-color: ${t.color || '#2563eb'}; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.4);">T${t.id}</div>`,
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    });
+
+                    const marker = L.marker([t.lat, t.lng], { icon: markerIcon }).addTo(mapInstance);
+                    marker.bindPopup(`
+                        <div class="text-xs p-1">
+                            <strong class="font-bold text-slate-800">${t.name}</strong><br>
+                            <span class="text-slate-500">${t.sector}</span><br>
+                            <div class="mt-1 bg-slate-100 p-1 rounded">
+                                <b>Estado:</b> ${t.status}<br>
+                                <b>Conductor:</b> ${t.lastConductor}<br>
+                                <b>Parada:</b> ${t.lastBlock}
+                            </div>
+                        </div>
+                    `);
+                    mapMarkers[t.id] = marker;
+                }
+            });
+        }
+
+        window.locateUserGPS = function() {
+            if (!mapInstance) return;
+            showToast("Buscando tu GPS en la isla...");
+            mapInstance.locate({ setView: true, maxZoom: 16 });
+            mapInstance.once('locationfound', (e) => {
+                L.marker(e.latlng).addTo(mapInstance).bindPopup("<b>Estás aquí</b>").openPopup();
+                showToast("GPS ubicado con éxito");
+            });
+        };
+
+        function renderReports() {
+            const completed = territoriesData.filter(t => t.status === 'COMPLETADO').length;
+            const inProgress = territoriesData.filter(t => t.status === 'EN_CURSO').length;
+            const available = territoriesData.filter(t => t.status === 'DISPONIBLE').length;
+
+            document.getElementById('statCompleted').textContent = completed;
+            document.getElementById('statInProgress').textContent = inProgress;
+            document.getElementById('statAvailable').textContent = available;
+
+            const percentage = Math.round((completed / 24) * 100);
+            document.getElementById('statPercentage').textContent = `${percentage}%`;
+            document.getElementById('statProgressBar').style.width = `${percentage}%`;
+
+            const tbody = document.getElementById('reportsTableBody');
+            tbody.innerHTML = territoriesData.map(t => `
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                    <td class="p-2.5 font-bold flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${t.color}"></span>
+                        T-${t.id} (${t.name})
+                    </td>
+                    <td class="p-2.5">
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded ${
+                            t.status === 'COMPLETADO' ? 'bg-blue-100 text-blue-800' : 
+                            t.status === 'EN_CURSO' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                        }">
+                            ${t.status}
+                        </span>
+                    </td>
+                    <td class="p-2.5">${t.lastConductor}</td>
+                    <td class="p-2.5 font-semibold text-brand-600 dark:text-blue-300">${t.lastBlock}</td>
+                    <td class="p-2.5 text-slate-400">${t.lastDate}</td>
+                </tr>
+            `).join('');
+        }
+
+        window.copyMonthlyReport = function() {
+            const completed = territoriesData.filter(t => t.status === 'COMPLETADO').length;
+            const inProgress = territoriesData.filter(t => t.status === 'EN_CURSO').length;
+            const percentage = Math.round((completed / 24) * 100);
+
+            let text = `📋 *INFORME MENSUAL - PUNÁ 5256*\n`;
+            text += `📅 Fecha: ${new Date().toLocaleDateString('es-EC')}\n\n`;
+            text += `✅ Completados: ${completed}/24 (${percentage}%)\n`;
+            text += `🟡 En curso: ${inProgress}\n\n`;
+            text += `*AVANCE DE GRUPO:* \n`;
+
+            territoriesData.filter(t => t.status === 'EN_CURSO').forEach(t => {
+                text += `• *T-${t.id}*: ${t.lastConductor} -> Quedó en: _${t.lastBlock}_\n`;
+            });
+
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            showToast("Informe copiado al portapapeles");
+        };
+
+        window.toggleDarkMode = function() {
+            document.documentElement.classList.toggle('dark');
+            const isDark = document.documentElement.classList.contains('dark');
+            document.getElementById('themeIcon').className = isDark ? "fa-solid fa-sun text-amber-300" : "fa-solid fa-moon";
+        };
+
+        window.toggleUserModal = function() {
+            const saved = localStorage.getItem('puna_user_name') || 'Cristian Palacios';
+            document.getElementById('userNameSelect').value = saved;
+            document.getElementById('userModal').classList.toggle('hidden');
+        };
+
+        window.saveUserProfile = function() {
+            const val = document.getElementById('userNameSelect').value;
+            if (val) {
+                localStorage.setItem('puna_user_name', val);
+                document.getElementById('currentUserNameDisplay').textContent = val;
+                document.getElementById('userModal').classList.add('hidden');
+                showToast(`Perfil guardado como "${val}"`);
+            }
+        };
+
+        function showToast(msg, isError = false) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').textContent = msg;
+            document.getElementById('toastIcon').className = isError ? 
+                "fa-solid fa-circle-exclamation text-amber-400" : "fa-solid fa-circle-check text-emerald-400";
+
+            toast.classList.remove('opacity-0', 'translate-y-[-10px]', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-[-10px]', 'pointer-events-none');
+            }, 3000);
+        }
+
+        window.onload = function() {
+            initAuth();
+            const savedName = localStorage.getItem('puna_user_name') || 'Cristian Palacios';
+            document.getElementById('currentUserNameDisplay').textContent = savedName;
+        };
+    </script>
+</body>
+</html>
